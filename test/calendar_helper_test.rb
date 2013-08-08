@@ -1,188 +1,248 @@
-require 'test_helper'
+require File.expand_path(File.dirname(__FILE__) + '/test_helper.rb')
 
 class CalendarHelperTest < ActionView::TestCase
+  include ActionView::Helpers::TextHelper
+  include ActionView::Helpers::TagHelper
   include CalendarHelper
+  attr_accessor :output_buffer
 
   def setup
-    @events = [
-      Event.new(3, 'Jimmy Page', DateTime.civil(2008, 12, 26, 1)), # In case is an hour of that day
-      Event.new(4, 'Robert Plant', Date.civil(2008, 12, 26))
-    ]
-    @events2 = [
-      Event.new(3, 'Jimmy Page', [DateTime.civil(2008, 12, 26, 1), DateTime.civil(2008, 12, 27, 1)]), # In case is an hour of that day
-      Event.new(4, 'Robert Plant', Date.civil(2008, 12, 26))
-    ]
+    @events = [Event.new(3, 'Jimmy Page', Date.civil(2008, 12, 26)),
+              Event.new(4, 'Robert Plant', Date.civil(2008, 12, 26))]
   end
 
-  should 'raise error if called without array' do
-    assert_raises(ArgumentError) { calendar_for('a') {|t|} }
+  def test_calendar_for
+    output = calendar_for(@events, :html => { :id => 'id', :style => 'style', :class => 'class'}) do |t|
+    end
+    expected = %(<table id="id" style="style" class="class">) <<
+      %(</table>)
+    assert_dom_equal expected, output
   end
-  
-  context 'Calendar days' do
-    should 'return objects_for_days with day and empty array' do
-      calendar = CalendarHelper::Calendar.new :year=> 2008, :month => 12
-      objects_for_days = (Date.civil(2008, 11, 30)..Date.civil(2009, 1, 3)).map { |day| [day, []] }
-      assert_equal objects_for_days, calendar.objects_for_days([], &:date)
-    end
-    
-    should 'return objects_for_days with days and events' do
-      calendar         = CalendarHelper::Calendar.new :year => 2008, :month => 12
-      objects_for_days = (Date.civil(2008, 11, 30)..Date.civil(2009, 1, 3)).map do |day|
-        [day, Date.civil(2008, 12, 26) == day ? @events : []]
-      end
-      assert_equal objects_for_days, calendar.objects_for_days(@events, &:date)
-    end
-    
-    should 'return objects_for_days with days and events when event has multiple dates' do
-      calendar         = CalendarHelper::Calendar.new :year => 2008, :month => 12
-      objects_for_days = (Date.civil(2008, 11, 30)..Date.civil(2009, 1, 3)).map do |day|
-        object =
-        case day
-        when DateTime.civil(2008, 12, 26, 1) then @events2
-        when DateTime.civil(2008, 12, 27, 1) then [@events2.first]
-        else [] end
-        [day, object]
-      end
-      assert_equal objects_for_days, calendar.objects_for_days(@events2, &:date)
-    end
-    
-    
-    should 'return objects_for_days with days accepting a block' do
-      calendar         = CalendarHelper::Calendar.new :year=> 2008, :month => 12
-      objects_for_days = (Date.civil(2008, 11, 30)..Date.civil(2009, 1, 3)).map do |day|
-        [day, Date.civil(2008, 12, 26) == day ? @events : []]
-      end
-      assert_equal objects_for_days, calendar.objects_for_days(@events){ |o| o.date  }
-    end
 
-    should 'map day range for calendar' do
-      calendar = CalendarHelper::Calendar.new(:year=> 2008, :month => 12)
-      assert_equal (Date.civil(2008, 11, 30)..Date.civil(2009, 1, 3)).map, calendar.days
-    end
-
-    should 'map day range starting from monday when passed first_weekday' do
-      calendar = CalendarHelper::Calendar.new(:year=> 2008, :month => 12, :first_weekday => 1)
-      assert_equal (Date.civil(2008, 12, 1)..Date.civil(2009, 1, 4)).map, calendar.days
-    end
-
-    should 'set first day to previous sunday' do
-      calendar = CalendarHelper::Calendar.new(:year=> 2008, :month => 12)
-      assert_equal Date.civil(2008, 11, 30), calendar.first_day
-    end
-
-    should 'set last day to following sunday' do
-      calendar = CalendarHelper::Calendar.new(:year=> 2008, :month => 12)
-      assert_equal Date.civil(2009, 1, 3), calendar.last_day
-    end
-    
-    should 'start range from previous monday when first_weekday is one' do
-      calendar = CalendarHelper::Calendar.new(:year=> 2008, :month => 12, :first_weekday => 1)
-      assert_equal Date.civil(2009, 1, 4), calendar.last_day
+  def test_calendar_for_without_an_array
+    self.output_buffer = ''
+    assert_raises(ArgumentError) do
+      calendar_for('a') {|t| }
     end
   end
-  
-  context 'ERB Rendering' do
-    should 'render table for calendar' do
-      erb = <<-ERB
-         <% calendar_for @events, :html => { :id => 'id', :style => 'style', :class => 'class'} do |t| %>
-         <% end %>
-       ERB
-       assert_dom_equal %(<table id="id" style="style" class="class"></table>), render(:inline => erb)
-    end
-    
-    should 'render trs and tds with empty array' do
-      erb = <<-ERB
-        <% calendar_for [], :year=> 2008, :month => 12 do |c| %>
-          <% c.day do |day, events| %>
-          <% end %>
-        <% end %>
-      ERB
-    
-      html = <<-HTML 
-      <table>
-        <tbody>
-          <tr><td class="notmonth weekend"></td><td></td><td></td><td></td><td></td><td></td><td class="weekend"></td></tr>
-          <tr><td class="weekend"></td><td></td><td></td><td></td><td></td><td></td><td class="weekend"></td></tr>
-          <tr><td class="weekend"></td><td></td><td></td><td></td><td></td><td></td><td class="weekend"></td></tr>
-          <tr><td class="weekend"></td><td></td><td></td><td></td><td></td><td></td><td class="weekend"></td></tr>
-          <tr><td class="weekend"></td><td></td><td></td><td></td><td class="notmonth"></td><td class="notmonth"></td><td class="notmonth weekend"></td></tr>
-        </tbody>
-      </table>
-      HTML
-      assert_dom_equal html, render(:inline => erb)
-    end
-   
-    should 'output day numbers' do
-      erb = <<-ERB
-        <% calendar_for @events, :year=> 2008, :month => 12 do |c| %>
-          <% c.day do |day, events| %>
-            <%= day.day %>
-          <% end %>
-        <% end %>
-      ERB
-  
-      html = <<-HTML
-      <table>
-        <tbody>
-          <tr><td class="notmonth weekend">30</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td class="weekend">6</td></tr>
-          <tr><td class="weekend">7</td><td>8</td><td>9</td><td>10</td><td>11</td><td>12</td><td class="weekend">13</td></tr>
-          <tr><td class="weekend">14</td><td>15</td><td>16</td><td>17</td><td>18</td><td>19</td><td class="weekend">20</td></tr>
-          <tr><td class="weekend">21</td><td>22</td><td>23</td><td>24</td><td>25</td><td>26</td><td class="weekend">27</td></tr>
-          <tr><td class="weekend">28</td><td>29</td><td>30</td><td>31</td><td class="notmonth">1</td><td class="notmonth">2</td><td class="notmonth weekend">3</td></tr>
-        </tbody>
-      </table>
-      HTML
 
-      assert_dom_equal html, render(:inline => erb)
+  def test_calendar_for_with_empty_array
+    output = calendar_for([], :year=> 2008, :month => 12) do |c|
+      c.day do |day, events|
+        concat(events.collect{|e| e.id}.join)
+      end
     end
-  
-    should 'render events' do
-      erb = <<-ERB
-        <% calendar_for @events, :year=> 2008, :month => 12 do |c| %>
-          <% c.day do |day, events| %>
-            <%= events.map(&:id).join(',') %>
-          <% end %>
-        <% end %>
-      ERB
+    expected = %(<table>) <<
+      %(<tbody>) <<
+        %(<tr><td class="notmonth weekend"></td><td></td><td></td><td></td><td></td><td></td><td class="weekend"></td></tr>) <<
+        %(<tr><td class="weekend"></td><td></td><td></td><td></td><td></td><td></td><td class="weekend"></td></tr>) <<
+        %(<tr><td class="weekend"></td><td></td><td></td><td></td><td></td><td></td><td class="weekend"></td></tr>) <<
+        %(<tr><td class="weekend"></td><td></td><td></td><td></td><td></td><td></td><td class="weekend"></td></tr>) <<
+        %(<tr><td class="weekend"></td><td></td><td></td><td></td><td class="notmonth"></td><td class="notmonth"></td><td class="notmonth weekend"></td></tr>) <<
+        %(</tbody>) <<
+      %(</table>)
+    assert_dom_equal expected, output
+  end
 
-      html = <<-HTML 
-      <table>
-        <tbody>
-          <tr><td class="notmonth weekend"></td><td></td><td></td><td></td><td></td><td></td><td class="weekend"></td></tr>
-          <tr><td class="weekend"></td><td></td><td></td><td></td><td></td><td></td><td class="weekend"></td></tr>
-          <tr><td class="weekend"></td><td></td><td></td><td></td><td></td><td></td><td class="weekend"></td></tr>
-          <tr><td class="weekend"></td><td></td><td></td><td></td><td></td><td>3,4</td><td class="weekend"></td></tr>
-          <tr><td class="weekend"></td><td></td><td></td><td></td><td class="notmonth"></td><td class="notmonth"></td><td class="notmonth weekend"></td></tr>
-        </tbody>
-      </table>
-      HTML
-      assert_dom_equal html, render(:inline => erb)
+  def test_calendar_for_with_events
+    output = calendar_for(@events, :year=> 2008, :month => 12) do |c|
+      c.day do |day, events|
+        content = events.collect{|e| e.id}.join
+        concat("(#{day.day})#{content}")
+      end
     end
+    expected = %(<table>) <<
+      %(<tbody>) <<
+        %(<tr><td class="notmonth weekend">(30)</td><td>(1)</td><td>(2)</td><td>(3)</td><td>(4)</td><td>(5)</td><td class="weekend">(6)</td></tr>) <<
+        %(<tr><td class="weekend">(7)</td><td>(8)</td><td>(9)</td><td>(10)</td><td>(11)</td><td>(12)</td><td class="weekend">(13)</td></tr>) <<
+        %(<tr><td class="weekend">(14)</td><td>(15)</td><td>(16)</td><td>(17)</td><td>(18)</td><td>(19)</td><td class="weekend">(20)</td></tr>) <<
+        %(<tr><td class="weekend">(21)</td><td>(22)</td><td>(23)</td><td>(24)</td><td>(25)</td><td>(26)34</td><td class="weekend">(27)</td></tr>) <<
+        %(<tr><td class="weekend">(28)</td><td>(29)</td><td>(30)</td><td>(31)</td><td class="notmonth">(1)</td><td class="notmonth">(2)</td><td class="notmonth weekend">(3)</td></tr>) <<
+        %(</tbody>) <<
+      %(</table>)
+    assert_dom_equal expected, output
+  end
 
-    should 'render id attribute for using pattern' do
-      erb = <<-ERB
-        <% calendar_for @events, :year=> 2008, :month => 12, :today => Date.civil(2008, 12, 15) do |c| %>
-          <% c.day :id => 'day_%d' do |day, events| %>
-            <%= events.map(&:id).join(',') %>
-          <% end %>
-        <% end %>
-      ERB
-
-      html = <<-HTML
-        <table>
-          <tbody>
-            <tr><td class="notmonth weekend" id="day_30"></td><td id="day_01"></td><td id="day_02"></td><td id="day_03"></td><td id="day_04"></td><td id="day_05"></td><td class="weekend" id="day_06"></td></tr>
-            <tr><td class="weekend" id="day_07"></td><td id="day_08"></td><td id="day_09"></td><td id="day_10"></td><td id="day_11"></td><td id="day_12"></td><td class="weekend" id="day_13"></td></tr>
-            <tr><td class="weekend" id="day_14"></td><td class="today"id="day_15"></td><td id="day_16"></td><td id="day_17"></td><td id="day_18"></td><td id="day_19"></td><td class="weekend" id="day_20"></td></tr>
-            <tr><td class="weekend" id="day_21"></td><td id="day_22"></td><td id="day_23"></td><td id="day_24"></td><td id="day_25"></td><td id="day_26">3,4</td><td class="weekend" id="day_27"></td></tr>
-            <tr><td class="weekend" id="day_28"></td><td id="day_29"></td><td id="day_30"></td><td id="day_31"></td><td class="notmonth" id="day_01"></td><td class="notmonth" id="day_02"></td><td class="notmonth weekend" id="day_03"></td></tr>
-          </tbody>
-        </table>
-      HTML
-      assert_dom_equal html, render(:inline => erb)
+  def test_calendar_for_sets_css_classes
+    output = calendar_for([], :year=> 2008, :month => 12, :today => Date.civil(2008, 12, 15)) do |c|
+      c.day do |day, events|
+        concat(events.collect{|e| e.id}.join)
+      end
     end
-  
+    expected = %(<table>) <<
+      %(<tbody>) <<
+        %(<tr><td class="notmonth weekend"></td><td></td><td></td><td></td><td></td><td></td><td class="weekend"></td></tr>) <<
+        %(<tr><td class="weekend"></td><td></td><td></td><td></td><td></td><td></td><td class="weekend"></td></tr>) <<
+        %(<tr><td class="weekend"></td><td class="today"></td><td class="future"></td><td class="future"></td><td class="future"></td><td class="future"></td><td class="weekend future"></td></tr>) <<
+        %(<tr><td class="weekend future"></td><td class="future"></td><td class="future"></td><td class="future"></td><td class="future"></td><td class="future"></td><td class="weekend future"></td></tr>) <<
+        %(<tr><td class="weekend future"></td><td class="future"></td><td class="future"></td><td class="future"></td><td class="notmonth future"></td><td class="notmonth future"></td><td class="notmonth weekend future"></td></tr>) <<
+        %(</tbody>) <<
+      %(</table>)
+    assert_dom_equal expected, output
+  end
+
+  def test_calendar_for_thirty_days
+    today = Date.civil(2008, 12, 15)
+    output = calendar_for([], :today => today, :year=>2008, :month=>12, :first=>today, :last=>:thirty_days) do |c|
+      c.day do |day, events|
+        concat(events.collect{|e| e.id}.join)
+      end
+    end
+    expected = %(<table>) <<
+      %(<tbody>) <<
+        %(<tr><td class="weekend"></td><td class="today"></td><td class="future"></td><td class="future"></td><td class="future"></td><td class="future"></td><td class="weekend future"></td></tr>) <<
+        %(<tr><td class="weekend future"></td><td class="future"></td><td class="future"></td><td class="future"></td><td class="future"></td><td class="future"></td><td class="weekend future"></td></tr>) <<
+        %(<tr><td class="weekend future"></td><td class="future"></td><td class="future"></td><td class="future"></td><td class="notmonth future"></td><td class="notmonth future"></td><td class="notmonth weekend future"></td></tr>) <<
+        %(<tr><td class="notmonth weekend future"></td><td class="notmonth future"></td><td class="notmonth future"></td><td class="notmonth future"></td><td class="notmonth future"></td><td class="notmonth future"></td><td class="notmonth weekend future"></td></tr>) <<
+        %(<tr><td class="notmonth weekend future"></td><td class="notmonth future"></td><td class="notmonth future"></td><td class="notmonth future"></td><td class="notmonth future"></td><td class="notmonth future"></td><td class="notmonth weekend future"></td></tr>) <<
+        %(</tbody>) <<
+      %(</table>)
+    assert_dom_equal expected, output
+  end
+
+  def test_calendar_for_week
+    today = Date.civil(2008, 12, 15)
+    output = calendar_for([], :today => today, :year=>2008, :month=>12, :first=>today, :last=>:week) do |c|
+      c.day do |day, events|
+        concat(events.collect{|e| e.id}.join)
+      end
+    end
+    expected = %(<table>) <<
+      %(<tbody>) <<
+        %(<tr><td class="weekend"></td><td class="today"></td><td class="future"></td><td class="future"></td><td class="future"></td><td class="future"></td><td class="weekend future"></td></tr>) <<
+        %(</tbody>) <<
+      %(</table>)
+    assert_dom_equal expected, output
+  end
+
+  def test_calendar_for_sets_css_ids
+    output = calendar_for([], :year=> 2008, :month => 12, :today => Date.civil(2008, 12, 15)) do |c|
+      c.day(:id => 'day_%d') do |day, events|
+        concat(events.collect{|e| e.id}.join)
+      end
+    end
+    expected = %(<table>) <<
+      %(<tbody>) <<
+        %(<tr><td class="notmonth weekend" id="day_30"></td><td id="day_01"></td><td id="day_02"></td><td id="day_03"></td><td id="day_04"></td><td id="day_05"></td><td class="weekend" id="day_06"></td></tr>) <<
+        %(<tr><td class="weekend" id="day_07"></td><td id="day_08"></td><td id="day_09"></td><td id="day_10"></td><td id="day_11"></td><td id="day_12"></td><td class="weekend" id="day_13"></td></tr>) <<
+        %(<tr><td class="weekend" id="day_14"></td><td class="today"id="day_15"></td><td class="future" id="day_16"></td><td class="future" id="day_17"></td><td class="future" id="day_18"></td><td class="future" id="day_19"></td><td class="future" class="weekend future" id="day_20"></td></tr>) <<
+        %(<tr><td class="weekend future" id="day_21"></td><td class="future" id="day_22"></td><td class="future" id="day_23"></td><td class="future" id="day_24"></td><td class="future" id="day_25"></td><td class="future" id="day_26"></td><td class="weekend future" id="day_27"></td></tr>) <<
+        %(<tr><td class="weekend future" id="day_28"></td><td class="future" id="day_29"></td><td class="future" id="day_30"></td><td class="future" id="day_31"></td><td class="notmonth future" id="day_01"></td><td class="notmonth future" id="day_02"></td><td class="notmonth weekend future" id="day_03"></td></tr>) <<
+        %(</tbody>) <<
+      %(</table>)
+    assert_dom_equal expected, output
+  end
+
+  def test_calendar_for_with_row_headers
+    output = calendar_for([], :year=> 2008, :month => 12, :row_header => true) do |c|
+      c.day do |day, events|
+        if events.nil?
+          concat(day.cweek)
+        else
+          concat(events.collect{|e| e.id}.join)
+        end
+      end
+    end
+    expected = %(<table>) <<
+      %(<tbody>) <<
+        %(<tr><td class="notmonth weekend row_header">48</td><td class="notmonth weekend"></td><td></td><td></td><td></td><td></td><td></td><td class="weekend"></td></tr>) <<
+        %(<tr><td class="weekend row_header">49</td><td class="weekend"></td><td></td><td></td><td></td><td></td><td></td><td class="weekend"></td></tr>) <<
+        %(<tr><td class="weekend row_header">50</td><td class="weekend"></td><td></td><td></td><td></td><td></td><td></td><td class="weekend"></td></tr>) <<
+        %(<tr><td class="weekend row_header">51</td><td class="weekend"></td><td></td><td></td><td></td><td></td><td></td><td class="weekend"></td></tr>) <<
+        %(<tr><td class="weekend row_header">52</td><td class="weekend"></td><td></td><td></td><td></td><td class="notmonth"></td><td class="notmonth"></td><td class="notmonth weekend"></td></tr>) <<
+        %(</tbody>) <<
+      %(</table>)
+    assert_dom_equal expected, output
+  end
+
+  def test_calendar_for_with_enumerable_object
+    output = calendar_for(Wrapped.new(@events), :year=> 2008, :month => 12) do |c|
+      c.day do |day, events|
+        content = events.collect{|e| e.id}.join
+        concat("(#{day.day})#{content}")
+      end
+    end
+    expected = %(<table>) <<
+      %(<tbody>) <<
+        %(<tr><td class="notmonth weekend">(30)</td><td>(1)</td><td>(2)</td><td>(3)</td><td>(4)</td><td>(5)</td><td class="weekend">(6)</td></tr>) <<
+        %(<tr><td class="weekend">(7)</td><td>(8)</td><td>(9)</td><td>(10)</td><td>(11)</td><td>(12)</td><td class="weekend">(13)</td></tr>) <<
+        %(<tr><td class="weekend">(14)</td><td>(15)</td><td>(16)</td><td>(17)</td><td>(18)</td><td>(19)</td><td class="weekend">(20)</td></tr>) <<
+        %(<tr><td class="weekend">(21)</td><td>(22)</td><td>(23)</td><td>(24)</td><td>(25)</td><td>(26)34</td><td class="weekend">(27)</td></tr>) <<
+        %(<tr><td class="weekend">(28)</td><td>(29)</td><td>(30)</td><td>(31)</td><td class="notmonth">(1)</td><td class="notmonth">(2)</td><td class="notmonth weekend">(3)</td></tr>) <<
+        %(</tbody>) <<
+      %(</table>)
+    assert_dom_equal expected, output
+  end
+
+end
+
+class CalendarHelperTest < ActionView::TestCase
+
+  def setup
+    @events = [Event.new(3, 'Jimmy Page', Date.civil(2008, 12, 26)),
+              Event.new(4, 'Robert Plant', Date.civil(2008, 12, 26))]
+  end
+
+  def test_objects_for_days_with_events
+    calendar = CalendarHelper::Calendar.new(:year=> 2008, :month => 12)
+    objects_for_days = {}
+    Date.civil(2008, 11, 30).upto(Date.civil(2009, 1, 3)){|day| objects_for_days[day.strftime("%Y-%m-%d")] = [day, []]}
+    objects_for_days['2008-12-26'][1] = @events
+    assert_equal objects_for_days, calendar.objects_for_days(@events, :date)
+  end
+
+  def test_objects_for_days
+    calendar = CalendarHelper::Calendar.new(:year=> 2008, :month => 12)
+    objects_for_days = {}
+    Date.civil(2008, 11, 30).upto(Date.civil(2009, 1, 3)){|day| objects_for_days[day.strftime("%Y-%m-%d")] = [day, []]}
+    assert_equal objects_for_days, calendar.objects_for_days([], :date)
+  end
+
+  def test_days
+    calendar = CalendarHelper::Calendar.new(:year=> 2008, :month => 12)
+    days = []
+    Date.civil(2008, 11, 30).upto(Date.civil(2009, 1, 3)){|day| days << day}
+    assert_equal days, calendar.days
+  end
+
+  def test_days_with_first_day_of_week_set
+    calendar = CalendarHelper::Calendar.new(:year=> 2008, :month => 12, :first_day_of_week => 1)
+    days = []
+    Date.civil(2008, 12, 1).upto(Date.civil(2009, 1, 4)){|day| days << day}
+    assert_equal days, calendar.days
+  end
+
+  def test_first_day
+    calendar = CalendarHelper::Calendar.new(:year=> 2008, :month => 12)
+    assert_equal Date.civil(2008, 11, 30), calendar.first_day
+  end
+
+  def test_last_day
+    calendar = CalendarHelper::Calendar.new(:year=> 2008, :month => 12)
+    assert_equal Date.civil(2009, 1, 3), calendar.last_day
+  end
+
+  def test_last_day_with_first_day_of_week_set
+    calendar = CalendarHelper::Calendar.new(:year=> 2008, :month => 12, :first_day_of_week => 1)
+    assert_equal Date.civil(2009, 1, 4), calendar.last_day
   end
 end
 
+class Event < Struct.new(:id, :name, :date); end
 
+class Wrapped
+  include Enumerable
+  attr_accessor :objects
+
+  def initialize(objects)
+    @objects = objects
+  end
+
+  def each
+    @objects.each { |item| yield item }
+  end
+
+  def <=>(other)
+    @objects <=> other
+  end
+end
